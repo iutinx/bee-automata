@@ -1,1 +1,13 @@
-MACRO.md
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+.env
+*.egg-info/
+dist/
+build/
+*.egg
+logs/
+*.log
