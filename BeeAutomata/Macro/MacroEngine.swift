@@ -26,6 +26,14 @@ final class MacroEngine: ObservableObject {
         }
     }
 
+    func unassign(slotIndex: Int) {
+        guard slotIndex >= 0, slotIndex < Self.slotCount else { return }
+        slots[slotIndex].assigned = false
+        slots[slotIndex].intervalMs = 1000
+        slots[slotIndex].isActive = true
+        stopTimer(for: slotIndex)
+    }
+
     func toggleSlotActive(_ active: Bool, slotIndex: Int) {
         guard slotIndex >= 0, slotIndex < Self.slotCount else { return }
         slots[slotIndex].isActive = active
