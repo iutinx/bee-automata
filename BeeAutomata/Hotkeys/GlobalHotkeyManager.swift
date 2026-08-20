@@ -2,10 +2,8 @@ import AppKit
 
 final class GlobalHotkeyManager {
 
-    private var toggleGlobalMonitor: Any?
-    private var calibrateGlobalMonitor: Any?
-    private var toggleLocalMonitor: Any?
-    private var calibrateLocalMonitor: Any?
+    private var globalMonitor: Any?
+    private var localMonitor: Any?
     private var onToggle: (() -> Void)?
     private var onCalibrate: (() -> Void)?
 
@@ -28,20 +26,11 @@ final class GlobalHotkeyManager {
     }
 
     private func installMonitors() {
-        toggleGlobalMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
+        globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
             self?.handleKeyEvent(event)
         }
 
-        calibrateGlobalMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            self?.handleKeyEvent(event)
-        }
-
-        toggleLocalMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            self?.handleKeyEvent(event)
-            return event
-        }
-
-        calibrateLocalMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+        localMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             self?.handleKeyEvent(event)
             return event
         }
@@ -59,16 +48,10 @@ final class GlobalHotkeyManager {
     }
 
     deinit {
-        if let monitor = toggleGlobalMonitor {
+        if let monitor = globalMonitor {
             NSEvent.removeMonitor(monitor)
         }
-        if let monitor = calibrateGlobalMonitor {
-            NSEvent.removeMonitor(monitor)
-        }
-        if let monitor = toggleLocalMonitor {
-            NSEvent.removeMonitor(monitor)
-        }
-        if let monitor = calibrateLocalMonitor {
+        if let monitor = localMonitor {
             NSEvent.removeMonitor(monitor)
         }
     }
