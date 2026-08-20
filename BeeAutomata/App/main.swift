@@ -6,7 +6,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         appState.initialize()
-        print("[Bee Automata] Running. Press F6 to toggle macro.")
+        print("[Bee Automata] Running. Cmd+Shift+M = toggle macro, Cmd+Shift+C = calibrate.")
     }
 
     func applicationWillTerminate(_ notification: Notification) {
