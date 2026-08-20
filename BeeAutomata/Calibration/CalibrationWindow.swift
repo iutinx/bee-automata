@@ -10,12 +10,19 @@ final class CalibrationWindow: NSWindow {
 
     weak var calibrationDelegate: CalibrationWindowDelegate?
 
+    private var hudPanel: NSVisualEffectView!
+    private var iconView: NSImageView!
+    private var titleLabel: NSTextField!
     private var instructionLabel: NSTextField!
-    private var stepLabel: NSTextField!
+    private var stepDotsView: NSView!
+    private var progressIndicator: NSProgressIndicator!
+    private var cancelButton: NSButton!
     private var confirmButton: NSButton!
     private var mainContentView: CalibrationContentView!
 
     private var cursorPushed = false
+    private var currentStep = 1
+    private var totalSteps = 3
 
     init() {
         let screen = NSScreen.main?.frame ?? NSRect(x: 0, y: 0, width: 1920, height: 1080)
@@ -30,7 +37,7 @@ final class CalibrationWindow: NSWindow {
         level = .screenSaver
         isOpaque = false
         hasShadow = false
-        backgroundColor = NSColor.black.withAlphaComponent(0.4)
+        backgroundColor = NSColor.black.withAlphaComponent(0.3)
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
         ignoresMouseEvents = false
         acceptsMouseMovedEvents = true
@@ -42,7 +49,7 @@ final class CalibrationWindow: NSWindow {
         mainContentView = CalibrationContentView(frame: screen)
         contentView.addSubview(mainContentView)
 
-        setupInstructionBanner()
+        setupHUDPanel()
         NSCursor.crosshair.push()
         cursorPushed = true
     }
@@ -55,7 +62,6 @@ final class CalibrationWindow: NSWindow {
             NSCursor.pop()
             cursorPushed = false
         }
-        // Remove all subviews to prevent CoreAnimation from holding stale layer references
         contentView?.subviews.forEach { $0.removeFromSuperview() }
         mainContentView = nil
     }
@@ -66,9 +72,14 @@ final class CalibrationWindow: NSWindow {
         mainContentView.mode = .circle(circleRadius: radius)
         mainContentView.needsDisplay = true
 
-        confirmButton.isHidden = false
-        instructionLabel.stringValue = instruction
-        stepLabel.stringValue = "Step \(step)/\(total) — Press ESC to cancel"
+        currentStep = step
+        totalSteps = total
+        updateHUD(
+            icon: "circle.dashed",
+            title: "Circle Calibration",
+            instruction: instruction,
+            showConfirm: true
+        )
     }
 
     func showRectangleMode(instruction: String, step: Int, total: Int) {
@@ -76,9 +87,14 @@ final class CalibrationWindow: NSWindow {
         mainContentView.mode = .rectangle
         mainContentView.needsDisplay = true
 
-        confirmButton.isHidden = true
-        instructionLabel.stringValue = instruction
-        stepLabel.stringValue = "Step \(step)/\(total) — Press ESC to cancel"
+        currentStep = step
+        totalSteps = total
+        updateHUD(
+            icon: "rectangle.dashed",
+            title: "Rectangle Selection",
+            instruction: instruction,
+            showConfirm: false
+        )
     }
 
     var circleCenter: NSPoint? {
@@ -89,43 +105,127 @@ final class CalibrationWindow: NSWindow {
         mainContentView?.selectedRect
     }
 
-    private func setupInstructionBanner() {
-        let bannerHeight: CGFloat = 90
+    private func setupHUDPanel() {
         let screen = NSScreen.main
         let safeAreaTop = screen?.safeAreaInsets.top ?? 0
-        let bannerY = frame.height - bannerHeight - safeAreaTop
-        let banner = NSView(frame: NSRect(x: 0, y: bannerY,
-                                          width: frame.width, height: bannerHeight))
-        banner.wantsLayer = true
-        banner.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.8).cgColor
-        contentView?.addSubview(banner)
+        
+        let panelWidth: CGFloat = 480
+        let panelHeight: CGFloat = 200
+        let panelX = (frame.width - panelWidth) / 2
+        let panelY = frame.height - panelHeight - safeAreaTop - 40
 
-        instructionLabel = NSTextField(labelWithString: "Calibration Mode")
-        instructionLabel.frame = NSRect(x: 20, y: 50, width: frame.width - 200, height: 30)
-        instructionLabel.font = NSFont.systemFont(ofSize: 18, weight: .bold)
-        instructionLabel.textColor = .white
-        instructionLabel.alignment = .center
-        banner.addSubview(instructionLabel)
+        hudPanel = NSVisualEffectView(frame: NSRect(x: panelX, y: panelY, width: panelWidth, height: panelHeight))
+        hudPanel.material = .hudWindow
+        hudPanel.state = .active
+        hudPanel.blendingMode = .behindWindow
+        hudPanel.wantsLayer = true
+        hudPanel.layer?.cornerRadius = 12
+        hudPanel.layer?.masksToBounds = true
+        hudPanel.layer?.borderWidth = 1
+        hudPanel.layer?.borderColor = NSColor.white.withAlphaComponent(0.1).cgColor
+        contentView?.addSubview(hudPanel)
 
-        stepLabel = NSTextField(labelWithString: "")
-        stepLabel.frame = NSRect(x: 20, y: 25, width: frame.width - 200, height: 20)
-        stepLabel.font = NSFont.systemFont(ofSize: 13)
-        stepLabel.textColor = NSColor.white.withAlphaComponent(0.7)
-        stepLabel.alignment = .center
-        banner.addSubview(stepLabel)
+        let contentPadding: CGFloat = 20
+        var yOffset = panelHeight - contentPadding
+
+        iconView = NSImageView(frame: NSRect(x: contentPadding, y: yOffset - 32, width: 32, height: 32))
+        hudPanel.addSubview(iconView)
+
+        titleLabel = NSTextField(labelWithString: "")
+        titleLabel.frame = NSRect(x: contentPadding + 44, y: yOffset - 24, width: panelWidth - 88, height: 24)
+        titleLabel.font = NSFont.systemFont(ofSize: 16, weight: .semibold)
+        titleLabel.textColor = .labelColor
+        titleLabel.alignment = .left
+        hudPanel.addSubview(titleLabel)
+
+        yOffset -= 40
+
+        instructionLabel = NSTextField(labelWithString: "")
+        instructionLabel.frame = NSRect(x: contentPadding, y: yOffset - 40, width: panelWidth - contentPadding * 2, height: 40)
+        instructionLabel.font = NSFont.systemFont(ofSize: 13)
+        instructionLabel.textColor = .secondaryLabelColor
+        instructionLabel.alignment = .left
+        instructionLabel.maximumNumberOfLines = 2
+        instructionLabel.lineBreakMode = .byWordWrapping
+        hudPanel.addSubview(instructionLabel)
+
+        yOffset -= 50
+
+        stepDotsView = NSView(frame: NSRect(x: contentPadding, y: yOffset - 12, width: 100, height: 12))
+        hudPanel.addSubview(stepDotsView)
+        setupStepDots()
+
+        progressIndicator = NSProgressIndicator(frame: NSRect(x: contentPadding + 120, y: yOffset - 12, width: panelWidth - 160, height: 12))
+        progressIndicator.style = .bar
+        progressIndicator.isIndeterminate = false
+        progressIndicator.minValue = 0
+        progressIndicator.maxValue = 1
+        progressIndicator.doubleValue = 0
+        hudPanel.addSubview(progressIndicator)
+
+        yOffset -= 30
+
+        let buttonY = yOffset - 28
+        cancelButton = NSButton(title: "Cancel", target: self, action: #selector(cancelClicked))
+        cancelButton.frame = NSRect(x: contentPadding, y: buttonY, width: 80, height: 28)
+        cancelButton.bezelStyle = .rounded
+        cancelButton.keyEquivalent = "\u{1b}"
+        hudPanel.addSubview(cancelButton)
 
         confirmButton = NSButton(title: "Confirm", target: self, action: #selector(confirmClicked))
-        confirmButton.frame = NSRect(x: frame.width - 140, y: 30, width: 120, height: 32)
+        confirmButton.frame = NSRect(x: panelWidth - contentPadding - 100, y: buttonY, width: 100, height: 28)
         confirmButton.bezelStyle = .rounded
         confirmButton.keyEquivalent = "\r"
         confirmButton.isHidden = true
-        banner.addSubview(confirmButton)
+        hudPanel.addSubview(confirmButton)
+    }
+
+    private func setupStepDots() {
+        let dotSize: CGFloat = 8
+        let dotSpacing: CGFloat = 8
+        
+        for i in 0..<totalSteps {
+            let dot = StepDotView(frame: NSRect(x: CGFloat(i) * (dotSize + dotSpacing), y: 2, width: dotSize, height: dotSize), index: i)
+            dot.wantsLayer = true
+            dot.layer?.cornerRadius = dotSize / 2
+            dot.layer?.backgroundColor = NSColor.secondaryLabelColor.cgColor
+            stepDotsView.addSubview(dot)
+        }
+    }
+
+    private func updateStepDots() {
+        for subview in stepDotsView.subviews {
+            if let dot = subview as? StepDotView {
+                let isCompleted = dot.index < currentStep
+                dot.layer?.backgroundColor = isCompleted
+                    ? NSColor.controlAccentColor.cgColor
+                    : NSColor.secondaryLabelColor.cgColor
+            }
+        }
+    }
+
+    private func updateHUD(icon: String, title: String, instruction: String, showConfirm: Bool) {
+        if let symbolImage = NSImage(systemSymbolName: icon, accessibilityDescription: nil) {
+            iconView.image = symbolImage
+            iconView.contentTintColor = .controlAccentColor
+        }
+
+        titleLabel.stringValue = title
+        instructionLabel.stringValue = instruction
+        confirmButton.isHidden = !showConfirm
+
+        progressIndicator.doubleValue = Double(currentStep - 1) / Double(totalSteps)
+        updateStepDots()
     }
 
     @objc private func confirmClicked() {
         if let center = circleCenter {
             calibrationDelegate?.calibrationWindow(self, didConfirmCircle: center)
         }
+    }
+
+    @objc private func cancelClicked() {
+        calibrationDelegate?.calibrationWindowDidCancel(self)
     }
 
     override func keyDown(with event: NSEvent) {
@@ -144,6 +244,19 @@ final class CalibrationWindow: NSWindow {
         } else {
             super.sendEvent(event)
         }
+    }
+}
+
+final class StepDotView: NSView {
+    let index: Int
+    
+    init(frame: NSRect, index: Int) {
+        self.index = index
+        super.init(frame: frame)
+    }
+    
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
     }
 }
 
