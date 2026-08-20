@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import AppKit
 
 struct SlotConfig: Codable, Equatable {
     var assigned: Bool = false
@@ -49,16 +50,32 @@ final class MacroEngine: ObservableObject {
 
     func start() {
         guard !isRunning else { return }
+        
+        print("[MacroEngine] Starting macro...")
+        print("[MacroEngine] Accessibility trusted: \(InputSynthesis.isAccessibilityTrusted())")
+        
+        if !InputSynthesis.isAccessibilityTrusted() {
+            print("[MacroEngine] ERROR: Accessibility permission not granted")
+            showAccessibilityAlert()
+            return
+        }
+        
         isRunning = true
-
+        
+        var activeTimers = 0
         for i in 0..<Self.slotCount {
             guard slots[i].assigned, slots[i].isActive else { continue }
+            print("[MacroEngine] Starting timer for slot \(i) with interval \(slots[i].intervalMs)ms")
             startTimer(for: i)
+            activeTimers += 1
         }
+        
+        print("[MacroEngine] Started \(activeTimers) active timer(s)")
     }
 
     func stop() {
         guard isRunning else { return }
+        print("[MacroEngine] Stopping macro...")
         isRunning = false
 
         for i in 0..<Self.slotCount {
@@ -67,12 +84,14 @@ final class MacroEngine: ObservableObject {
     }
 
     func toggle() {
+        print("[MacroEngine] Toggle called, current state: \(isRunning ? "running" : "stopped")")
         if isRunning { stop() } else { start() }
     }
 
     private func startTimer(for index: Int) {
         let interval = TimeInterval(slots[index].intervalMs) / 1000.0
         let timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { _ in
+            print("[MacroEngine] Timer fired for slot \(index)")
             InputSynthesis.pressKey(slotIndex: index)
         }
         RunLoop.main.add(timer, forMode: .common)
@@ -88,5 +107,21 @@ final class MacroEngine: ObservableObject {
         stopTimer(for: index)
         guard slots[index].assigned, slots[index].isActive else { return }
         startTimer(for: index)
+    }
+    
+    private func showAccessibilityAlert() {
+        let alert = NSAlert()
+        alert.messageText = "Accessibility Permission Required"
+        alert.informativeText = "Bee Automata needs accessibility permission to simulate key presses.\n\nPlease enable Bee Automata in System Preferences > Privacy & Security > Accessibility."
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Open System Preferences")
+        alert.addButton(withTitle: "Cancel")
+        
+        let response = alert.runModal()
+        if response == .alertFirstButtonReturn {
+            if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
+                NSWorkspace.shared.open(url)
+            }
+        }
     }
 }
