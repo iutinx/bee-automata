@@ -36,11 +36,13 @@ final class CalibrationController: CalibrationWindowDelegate {
     private var boostSearchRegion: CalibrationRect?
 
     private var onComplete: ((CalibrationProfile) -> Void)?
+    private var onFinish: (() -> Void)?
 
     private let circleRadius: CGFloat = 30
 
-    func start(onComplete: @escaping (CalibrationProfile) -> Void) {
+    func start(onComplete: @escaping (CalibrationProfile) -> Void, onFinish: @escaping () -> Void) {
         self.onComplete = onComplete
+        self.onFinish = onFinish
 
         abilityCircles = []
         boostSearchRegion = nil
@@ -58,6 +60,7 @@ final class CalibrationController: CalibrationWindowDelegate {
         window?.cleanup()
         window?.orderOut(nil)
         window = nil
+        onFinish?()
     }
 
     private func showCurrentStep() {
@@ -80,6 +83,14 @@ final class CalibrationController: CalibrationWindowDelegate {
         case .complete:
             break
         }
+    }
+
+    private func lowerWindowLevel() {
+        window?.level = .normal
+    }
+
+    private func restoreWindowLevel() {
+        window?.level = .screenSaver
     }
 
     func calibrationWindow(_ window: CalibrationWindow, didConfirmCircle center: NSPoint) {
@@ -109,8 +120,26 @@ final class CalibrationController: CalibrationWindowDelegate {
     }
 
     func calibrationWindowDidCancel(_ window: CalibrationWindow) {
-        print("[Calibration] Cancelled by user")
-        cancel()
+        showCancelConfirmation()
+    }
+
+    private func showCancelConfirmation() {
+        lowerWindowLevel()
+        
+        let alert = NSAlert()
+        alert.messageText = "Cancel Calibration?"
+        alert.informativeText = "All progress will be lost. Are you sure you want to cancel?"
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Cancel Calibration")
+        alert.addButton(withTitle: "Continue")
+        
+        let response = alert.runModal()
+        if response == .alertFirstButtonReturn {
+            print("[Calibration] Cancelled by user")
+            cancel()
+        } else {
+            restoreWindowLevel()
+        }
     }
 
     private func finishCalibration() {
@@ -129,13 +158,33 @@ final class CalibrationController: CalibrationWindowDelegate {
             boostSearchRegion: boostRegion
         )
 
-        ProfileManager.shared.saveProfile(profile)
+        showCompletionConfirmation(profile: profile)
+    }
 
-        window?.cleanup()
-        window?.orderOut(nil)
-        window = nil
-
-        onComplete?(profile)
-        print("[Calibration] Complete — profile saved")
+    private func showCompletionConfirmation(profile: CalibrationProfile) {
+        lowerWindowLevel()
+        
+        let alert = NSAlert()
+        alert.messageText = "Calibration Complete"
+        alert.informativeText = "All calibration data has been collected. Save profile and continue?"
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "Save Profile")
+        alert.addButton(withTitle: "Discard")
+        
+        let response = alert.runModal()
+        if response == .alertFirstButtonReturn {
+            ProfileManager.shared.saveProfile(profile)
+            
+            window?.cleanup()
+            window?.orderOut(nil)
+            window = nil
+            
+            onComplete?(profile)
+            onFinish?()
+            print("[Calibration] Complete — profile saved")
+        } else {
+            print("[Calibration] Profile discarded by user")
+            cancel()
+        }
     }
 }

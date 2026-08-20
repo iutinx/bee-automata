@@ -34,9 +34,13 @@ final class AppState: ObservableObject {
         guard calibrationController == nil else { return }
         let controller = CalibrationController()
         calibrationController = controller
-        controller.start { [weak self] newProfile in
-            self?.profile = newProfile
-            self?.calibrationController = nil
-        }
+        controller.start(
+            onComplete: { [weak self] newProfile in
+                self?.profile = newProfile
+            },
+            onFinish: { [weak self] in
+                self?.calibrationController = nil
+            }
+        )
     }
 }
